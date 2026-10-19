@@ -21,6 +21,19 @@ Document business rules, transaction catalog, orchestration, approvals, and APIs
 - Maintain README, CODEOWNERS, SECURITY, CHANGELOG, tests, and local verification.
 - Contain no business logic in shared libraries or front-end remotes.
 
+## Local run
+
+```powershell
+$env:JAVA_HOME='C:\Program Files\Eclipse Adoptium\jdk-22.0.2.9-hotspot'
+.\gradlew.bat build
+.\gradlew.bat bootRun
+```
+
+- Port: `8096`.
+- Requires `X-EIA-Tenant` (UUID) on every request.
+- Calls the expert at `http://localhost:8095` (`eia.document.expert-url`).
+- Public API: `GET|POST /api/v1/documents`, `GET /api/v1/documents/{id}`, `POST /api/v1/documents/{id}/status`.
+
 ## Verification
 
 - Lint and format
