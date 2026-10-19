@@ -7,7 +7,7 @@
 - Owner: Document
 - Runtime: Java 22 and Spring Boot
 - Data store: eia_document (tx schema)
-- Depends on: eia-document-expert, eia-contracts, eia-open-insurance-libs
+- Depends on: eia-document-expert, eia-contracts, eia-platform/libs
 
 ## Purpose
 
