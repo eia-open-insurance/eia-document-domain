@@ -1,13 +1,13 @@
 # eia-document-domain
 
-- GitHub organization: `eia-platform`
-- Repository URL: https://github.com/eia-platform/eia-document-domain
+- GitHub organization: `eia-open-insurance`
+- Repository URL: https://github.com/eia-open-insurance/eia-document-domain
 - Type: Spring Boot service
 - Deployable: Yes
 - Owner: Document
 - Runtime: Java 22 and Spring Boot
 - Data store: eia_document (tx schema)
-- Depends on: eia-document-expert, eia-contracts, eia-platform-libs
+- Depends on: eia-document-expert, eia-contracts, eia-open-insurance-libs
 
 ## Purpose
 
@@ -34,3 +34,6 @@ Document business rules, transaction catalog, orchestration, approvals, and APIs
 
 Owns the business logic for this vertical.
 
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
