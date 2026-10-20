@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -29,13 +30,46 @@ public class DocumentService {
     }
 
     /**
-     * Common global search. The tenant-scoped expert list is the only read path
-     * available to the domain, so matching, ordering, and limiting happen here
-     * and produce the shared search shape used by the shell.
+     * Tenant-scoped list with the optional document-link filter. The expert
+     * owns the pair rule and the closed link-type set, so an incomplete or
+     * unknown filter keeps the expert's 400 problem instead of being rewritten
+     * in the domain.
+     */
+    public List<DocumentDto> list(UUID tenantId, String linkedType, String linkedId) {
+        String type = trimToNull(linkedType);
+        String id = trimToNull(linkedId);
+        if (type == null && id == null) {
+            return client.findAll(tenantId);
+        }
+        return client.findAll(tenantId, type, id);
+    }
+
+    public List<DocumentLinkDto> links(UUID tenantId, UUID documentId) {
+        return client.findLinks(tenantId, documentId);
+    }
+
+    public DocumentLinkDto addLink(UUID tenantId, UUID documentId,
+                                   CreateDocumentLinkCommand command) {
+        return client.createLink(tenantId, documentId, command);
+    }
+
+    public void removeLink(UUID tenantId, UUID documentId, UUID linkId) {
+        client.deleteLink(tenantId, documentId, linkId);
+    }
+
+    /**
+     * Common global search. The expert search projection is preferred because
+     * it can match a link reference; if that route is not available this falls
+     * back to the tenant list and local metadata matching, which is the
+     * pass-through behaviour for an older expert.
      */
     public DocumentSearchResponse search(UUID tenantId, String q, int limit) {
         String query = q == null ? "" : q.trim();
         int effectiveLimit = Math.min(Math.max(limit, 1), MAX_SEARCH_LIMIT);
+        Optional<DocumentSearchResponse> expert = client.search(tenantId, query, effectiveLimit);
+        if (expert != null && expert.isPresent()) {
+            return expert.get();
+        }
         List<DocumentDto> documents = client.findAll(tenantId);
         if (documents == null) {
             documents = List.of();
@@ -103,5 +137,9 @@ public class DocumentService {
 
     private static boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private static String trimToNull(String value) {
+        return isBlank(value) ? null : value.trim();
     }
 }

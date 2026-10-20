@@ -1,6 +1,11 @@
 package com.eia.document.domain;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
@@ -13,7 +18,9 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Turns every failure into the structured {@link ApiError} envelope.
+ * Turns domain failures into the structured {@link ApiError} envelope. Link
+ * and filter failures that the expert already expressed as a problem keep their
+ * status and {@code application/problem+json} body instead.
  */
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -61,6 +68,41 @@ public class ApiExceptionHandler {
     @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
     public ApiError expertUnavailable(ExpertUnavailableException ex) {
         return new ApiError("EXPERT_UNAVAILABLE", ex.getMessage());
+    }
+
+    /**
+     * Link routes are a proxy surface. A 400, 404, or 409 from the expert is
+     * returned with its original status and an
+     * {@code application/problem+json} body; only the members needed for a
+     * valid problem are filled in when the expert omitted them.
+     */
+    @ExceptionHandler(ExpertProblemException.class)
+    public ResponseEntity<JsonNode> expertProblem(ExpertProblemException ex) {
+        ObjectNode problem = ex.body() instanceof ObjectNode expertBody
+                ? expertBody.deepCopy()
+                : JsonNodeFactory.instance.objectNode();
+        problem.put("status", ex.status());
+        if (isBlank(problem.get("title"))) {
+            HttpStatus status = HttpStatus.resolve(ex.status());
+            problem.put("title", status == null ? "Document expert request failed"
+                    : status.getReasonPhrase());
+        }
+        if (isBlank(problem.get("detail"))) {
+            String message = problem.hasNonNull("message")
+                    ? problem.get("message").asText() : null;
+            problem.put("detail", message == null || message.isBlank()
+                    ? "The document expert rejected the request" : message);
+        }
+        if (isBlank(problem.get("type"))) {
+            problem.put("type", "about:blank");
+        }
+        return ResponseEntity.status(ex.status())
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(problem);
+    }
+
+    private static boolean isBlank(JsonNode node) {
+        return node == null || node.isNull() || node.asText().isBlank();
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

@@ -11,8 +11,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -33,6 +35,43 @@ class DocumentSearchTest {
 
     @MockitoBean
     private DocumentExpertClient client;
+
+    @Test
+    void usesTheExpertSearchSoALinkReferenceMatches() throws Exception {
+        DocumentSearchItem item = new DocumentSearchItem(DOCUMENT_ID, "DOCUMENT",
+                "DOC-2026-0000001", "Policy schedule · ACTIVE", "ACTIVE",
+                "/document?record=" + DOCUMENT_ID);
+        when(client.search(TENANT, "POL-2026-0041827", 10))
+                .thenReturn(Optional.of(new DocumentSearchResponse("POL-2026-0041827", 10,
+                        List.of(item))));
+
+        mvc.perform(get("/api/v1/documents/search")
+                        .param("q", "POL-2026-0041827")
+                        .header("X-EIA-Tenant", TENANT.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.query").value("POL-2026-0041827"))
+                .andExpect(jsonPath("$.items[0].id").value(DOCUMENT_ID.toString()));
+
+        verify(client).search(TENANT, "POL-2026-0041827", 10);
+        verify(client, never()).findAll(TENANT);
+    }
+
+    @Test
+    void fallsBackToTheTenantListWhenTheExpertSearchRouteIsAbsent() throws Exception {
+        when(client.search(TENANT, "acme", 10)).thenReturn(Optional.empty());
+        when(client.findAll(TENANT)).thenReturn(List.of(document(DOCUMENT_ID, TENANT,
+                "DOC-2026-0000001", "Acme CGL policy 2026", "POLICY", "RECEIVED", BASE)));
+
+        mvc.perform(get("/api/v1/documents/search")
+                        .param("q", "acme")
+                        .header("X-EIA-Tenant", TENANT.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(DOCUMENT_ID.toString()));
+
+        verify(client).search(TENANT, "acme", 10);
+        verify(client).findAll(TENANT);
+    }
 
     @Test
     void matchesByDocumentNumber() throws Exception {

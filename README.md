@@ -33,6 +33,9 @@ $env:JAVA_HOME='C:\Program Files\Eclipse Adoptium\jdk-22.0.2.9-hotspot'
 - Requires `X-EIA-Tenant` (UUID) on every request.
 - Calls the expert at `http://localhost:8095` (`eia.document.expert-url`).
 - Public API: `GET|POST /api/v1/documents`, `GET /api/v1/documents/{id}`, `POST /api/v1/documents/{id}/status`.
+- Document links: `GET|POST /api/v1/documents/{documentId}/links`, `DELETE /api/v1/documents/{documentId}/links/{linkId}`.
+- The document list accepts the optional `linkedType` + `linkedId` pair. Search forwards `q` to the expert so a linked reference can match; when the expert search route is unavailable it falls back to the local tenant list projection.
+- Link and filter failures keep the expert's 400/404/409 status and problem body (`application/problem+json`).
 
 ## Verification
 

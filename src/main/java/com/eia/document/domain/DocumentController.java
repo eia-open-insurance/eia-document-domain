@@ -23,8 +23,10 @@ public class DocumentController {
     }
 
     @GetMapping
-    public List<DocumentDto> list(@RequestHeader(TENANT_HEADER) UUID tenantId) {
-        return service.list(tenantId);
+    public List<DocumentDto> list(@RequestHeader(TENANT_HEADER) UUID tenantId,
+                                  @RequestParam(name = "linkedType", required = false) String linkedType,
+                                  @RequestParam(name = "linkedId", required = false) String linkedId) {
+        return service.list(tenantId, linkedType, linkedId);
     }
 
     @GetMapping("/search")
@@ -51,5 +53,27 @@ public class DocumentController {
                                     @PathVariable UUID id,
                                     @Valid @RequestBody ChangeStatusCommand command) {
         return service.changeStatus(tenantId, id, command);
+    }
+
+    @GetMapping("/{documentId}/links")
+    public List<DocumentLinkDto> links(@RequestHeader(TENANT_HEADER) UUID tenantId,
+                                       @PathVariable UUID documentId) {
+        return service.links(tenantId, documentId);
+    }
+
+    @PostMapping("/{documentId}/links")
+    @ResponseStatus(HttpStatus.CREATED)
+    public DocumentLinkDto addLink(@RequestHeader(TENANT_HEADER) UUID tenantId,
+                                   @PathVariable UUID documentId,
+                                   @Valid @RequestBody CreateDocumentLinkCommand command) {
+        return service.addLink(tenantId, documentId, command);
+    }
+
+    @DeleteMapping("/{documentId}/links/{linkId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removeLink(@RequestHeader(TENANT_HEADER) UUID tenantId,
+                           @PathVariable UUID documentId,
+                           @PathVariable UUID linkId) {
+        service.removeLink(tenantId, documentId, linkId);
     }
 }
