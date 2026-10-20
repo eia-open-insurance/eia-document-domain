@@ -27,6 +27,13 @@ public class DocumentController {
         return service.list(tenantId);
     }
 
+    @GetMapping("/search")
+    public DocumentSearchResponse search(@RequestHeader(TENANT_HEADER) UUID tenantId,
+                                         @RequestParam(name = "q", required = false) String q,
+                                         @RequestParam(name = "limit", defaultValue = "10") int limit) {
+        return service.search(tenantId, q, limit);
+    }
+
     @GetMapping("/{id}")
     public DocumentDto get(@RequestHeader(TENANT_HEADER) UUID tenantId, @PathVariable UUID id) {
         return service.get(tenantId, id);
