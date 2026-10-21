@@ -38,6 +38,7 @@ class DocumentContentApiTest {
     private static final String DISPOSITION = "attachment; filename=\"policy schedule.pdf\"";
     private static final String SHA256 = "9f2c5d0f8f0d1c9a5f0f0f3a6b8c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f607182";
     private static final Instant UPLOADED_AT = Instant.parse("2026-10-20T09:30:00Z");
+    private static final long CURRENT_VERSION = 3L;
     private static final byte[] CONTENT = "%PDF-1.7 document bytes".getBytes(StandardCharsets.UTF_8);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -65,7 +66,8 @@ class DocumentContentApiTest {
                 .andExpect(jsonPath("$.contentType").value(MediaType.APPLICATION_PDF_VALUE))
                 .andExpect(jsonPath("$.sizeBytes").value(CONTENT.length))
                 .andExpect(jsonPath("$.sha256").value(SHA256))
-                .andExpect(jsonPath("$.uploadedAt").value("2026-10-20T09:30:00Z"));
+                .andExpect(jsonPath("$.uploadedAt").value("2026-10-20T09:30:00Z"))
+                .andExpect(jsonPath("$.currentVersion").value(CURRENT_VERSION));
 
         ArgumentCaptor<byte[]> body = ArgumentCaptor.forClass(byte[].class);
         verify(client).uploadContent(eq(TENANT), eq(DOCUMENT_ID), eq(FILE_NAME),
@@ -103,7 +105,8 @@ class DocumentContentApiTest {
                 .andExpect(jsonPath("$.contentType").value(MediaType.APPLICATION_PDF_VALUE))
                 .andExpect(jsonPath("$.sizeBytes").value(CONTENT.length))
                 .andExpect(jsonPath("$.sha256").value(SHA256))
-                .andExpect(jsonPath("$.uploadedAt").value("2026-10-20T09:30:00Z"));
+                .andExpect(jsonPath("$.uploadedAt").value("2026-10-20T09:30:00Z"))
+                .andExpect(jsonPath("$.currentVersion").value(CURRENT_VERSION));
 
         verify(client).contentMetadata(TENANT, DOCUMENT_ID);
     }
@@ -165,7 +168,8 @@ class DocumentContentApiTest {
         when(client.uploadContent(eq(TENANT), eq(DOCUMENT_ID), eq("limit.pdf"),
                 startsWith(MediaType.APPLICATION_OCTET_STREAM_VALUE), any(byte[].class)))
                 .thenReturn(new DocumentContentMetadata(DOCUMENT_ID, "limit.pdf",
-                        MediaType.APPLICATION_OCTET_STREAM_VALUE, atLimit.length, SHA256, UPLOADED_AT));
+                        MediaType.APPLICATION_OCTET_STREAM_VALUE, atLimit.length, SHA256, UPLOADED_AT,
+                        CURRENT_VERSION));
 
         mockMvc.perform(put("/api/v1/documents/{documentId}/content", DOCUMENT_ID)
                         .header("X-EIA-Tenant", TENANT.toString())
@@ -184,7 +188,7 @@ class DocumentContentApiTest {
         when(client.uploadContent(eq(TENANT), eq(DOCUMENT_ID), eq("empty.pdf"),
                 startsWith(MediaType.APPLICATION_PDF_VALUE), any(byte[].class)))
                 .thenReturn(new DocumentContentMetadata(DOCUMENT_ID, "empty.pdf",
-                        MediaType.APPLICATION_PDF_VALUE, 0, SHA256, UPLOADED_AT));
+                        MediaType.APPLICATION_PDF_VALUE, 0, SHA256, UPLOADED_AT, CURRENT_VERSION));
 
         mockMvc.perform(put("/api/v1/documents/{documentId}/content", DOCUMENT_ID)
                         .header("X-EIA-Tenant", TENANT.toString())
@@ -204,7 +208,8 @@ class DocumentContentApiTest {
         when(client.uploadContent(eq(TENANT), eq(DOCUMENT_ID), eq("raw.bin"),
                 startsWith(MediaType.APPLICATION_OCTET_STREAM_VALUE), any(byte[].class)))
                 .thenReturn(new DocumentContentMetadata(DOCUMENT_ID, "raw.bin",
-                        MediaType.APPLICATION_OCTET_STREAM_VALUE, CONTENT.length, SHA256, UPLOADED_AT));
+                        MediaType.APPLICATION_OCTET_STREAM_VALUE, CONTENT.length, SHA256, UPLOADED_AT,
+                        CURRENT_VERSION));
 
         mockMvc.perform(put("/api/v1/documents/{documentId}/content", DOCUMENT_ID)
                         .header("X-EIA-Tenant", TENANT.toString())
@@ -312,7 +317,8 @@ class DocumentContentApiTest {
 
     private static DocumentContentMetadata metadata() {
         return new DocumentContentMetadata(DOCUMENT_ID, FILE_NAME,
-                MediaType.APPLICATION_PDF_VALUE, CONTENT.length, SHA256, UPLOADED_AT);
+                MediaType.APPLICATION_PDF_VALUE, CONTENT.length, SHA256, UPLOADED_AT,
+                CURRENT_VERSION);
     }
 
     private static ExpertProblemException apiError(int status, String code, String message) {

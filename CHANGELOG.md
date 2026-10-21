@@ -27,3 +27,12 @@ The format is based on Keep a Changelog and the project uses Semantic Versioning
   are limited to 10 MiB, including an early filter rejection for oversized
   `Content-Length` and chunked bodies, returned as a `FILE_TOO_LARGE` 413
   problem.
+- Document content versions: `GET /api/v1/documents/{documentId}/content/versions`
+  returns the retained revision history and
+  `GET /api/v1/documents/{documentId}/content/versions/{version}` streams the
+  bytes of one revision with the expert's `Content-Type`,
+  `Content-Disposition`, and `X-Content-SHA256` headers forwarded unchanged.
+  Both routes forward `X-EIA-Tenant` and the `tenantId` query to the expert and
+  preserve expert 400/404 problems as `application/problem+json`. The content
+  metadata projection (`upload` and `GET .../content/metadata`) now carries
+  `currentVersion`.

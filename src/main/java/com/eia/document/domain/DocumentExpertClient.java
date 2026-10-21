@@ -184,16 +184,41 @@ public class DocumentExpertClient {
      * returned to the domain so the public route can expose them unchanged.
      */
     public DocumentContentDownload downloadContent(UUID tenantId, UUID documentId) {
-        ResponseEntity<byte[]> response = handle(client.get()
+        return toDownload(handle(client.get()
                 .uri(uri -> uri.path("/api/v1/documents/{documentId}/content")
                         .queryParam("tenantId", tenantId).build(documentId))
                 .header(TENANT_HEADER, tenantId.toString()), true)
-                .toEntity(byte[].class);
-        byte[] body = response.getBody() == null ? new byte[0] : response.getBody();
-        HttpHeaders headers = response.getHeaders();
-        return new DocumentContentDownload(body, headers.getContentType(),
-                headers.getFirst(HttpHeaders.CONTENT_DISPOSITION),
-                headers.getFirst(DocumentContentPolicy.CONTENT_SHA_HEADER));
+                .toEntity(byte[].class));
+    }
+
+    /**
+     * Retained content revisions, newest first as ordered by the expert. The
+     * tenant travels on both the query parameter and {@code X-EIA-Tenant}; a
+     * document outside the tenant or without stored content keeps the expert's
+     * problem response.
+     */
+    public List<DocumentContentVersion> contentVersions(UUID tenantId, UUID documentId) {
+        List<DocumentContentVersion> versions = handle(client.get()
+                .uri(uri -> uri.path("/api/v1/documents/{documentId}/content/versions")
+                        .queryParam("tenantId", tenantId).build(documentId))
+                .header(TENANT_HEADER, tenantId.toString()), true)
+                .body(new ParameterizedTypeReference<List<DocumentContentVersion>>() {});
+        return versions == null ? List.of() : versions;
+    }
+
+    /**
+     * Streams the bytes of one retained revision. Like the current-content
+     * download, the expert's {@code Content-Type}, {@code Content-Disposition},
+     * and {@code X-Content-SHA256} headers are exposed unchanged, and an
+     * unknown version keeps the expert's 400/404 problem.
+     */
+    public DocumentContentDownload downloadContentVersion(UUID tenantId, UUID documentId,
+                                                          long version) {
+        return toDownload(handle(client.get()
+                .uri(uri -> uri.path("/api/v1/documents/{documentId}/content/versions/{version}")
+                        .queryParam("tenantId", tenantId).build(documentId, version))
+                .header(TENANT_HEADER, tenantId.toString()), true)
+                .toEntity(byte[].class));
     }
 
     public DocumentContentMetadata contentMetadata(UUID tenantId, UUID documentId) {
@@ -202,6 +227,14 @@ public class DocumentExpertClient {
                         .queryParam("tenantId", tenantId).build(documentId))
                 .header(TENANT_HEADER, tenantId.toString()), true)
                 .body(DocumentContentMetadata.class);
+    }
+
+    private static DocumentContentDownload toDownload(ResponseEntity<byte[]> response) {
+        byte[] body = response.getBody() == null ? new byte[0] : response.getBody();
+        HttpHeaders headers = response.getHeaders();
+        return new DocumentContentDownload(body, headers.getContentType(),
+                headers.getFirst(HttpHeaders.CONTENT_DISPOSITION),
+                headers.getFirst(DocumentContentPolicy.CONTENT_SHA_HEADER));
     }
 
     private static MediaType mediaTypeOrOctetStream(String raw) {

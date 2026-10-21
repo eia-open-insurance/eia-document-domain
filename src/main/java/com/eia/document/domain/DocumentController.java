@@ -82,7 +82,39 @@ public class DocumentController {
     @GetMapping("/{documentId}/content")
     public ResponseEntity<byte[]> downloadContent(@RequestHeader(TENANT_HEADER) UUID tenantId,
                                                   @PathVariable UUID documentId) {
-        DocumentContentDownload content = service.downloadContent(tenantId, documentId);
+        return downloadResponse(service.downloadContent(tenantId, documentId));
+    }
+
+    @GetMapping("/{documentId}/content/metadata")
+    public DocumentContentMetadata contentMetadata(@RequestHeader(TENANT_HEADER) UUID tenantId,
+                                                   @PathVariable UUID documentId) {
+        return service.contentMetadata(tenantId, documentId);
+    }
+
+    /**
+     * Retained content revisions. The expert owns the history and its order;
+     * the domain tenant-scopes the read and passes the projection through.
+     */
+    @GetMapping("/{documentId}/content/versions")
+    public List<DocumentContentVersion> contentVersions(
+            @RequestHeader(TENANT_HEADER) UUID tenantId,
+            @PathVariable UUID documentId) {
+        return service.contentVersions(tenantId, documentId);
+    }
+
+    /**
+     * Bytes of one retained revision. The media type, original file name, and
+     * integrity hash are forwarded exactly as on the current-content download.
+     */
+    @GetMapping("/{documentId}/content/versions/{version}")
+    public ResponseEntity<byte[]> downloadContentVersion(
+            @RequestHeader(TENANT_HEADER) UUID tenantId,
+            @PathVariable UUID documentId,
+            @PathVariable long version) {
+        return downloadResponse(service.downloadContentVersion(tenantId, documentId, version));
+    }
+
+    private static ResponseEntity<byte[]> downloadResponse(DocumentContentDownload content) {
         ResponseEntity.BodyBuilder response = ResponseEntity.ok();
         if (content.contentType() != null) {
             response.contentType(content.contentType());
@@ -92,12 +124,6 @@ public class DocumentController {
             response.header(DocumentContentPolicy.CONTENT_SHA_HEADER, content.sha256());
         }
         return response.body(content.bytes());
-    }
-
-    @GetMapping("/{documentId}/content/metadata")
-    public DocumentContentMetadata contentMetadata(@RequestHeader(TENANT_HEADER) UUID tenantId,
-                                                   @PathVariable UUID documentId) {
-        return service.contentMetadata(tenantId, documentId);
     }
 
     private static String contentDisposition(DocumentContentDownload content) {

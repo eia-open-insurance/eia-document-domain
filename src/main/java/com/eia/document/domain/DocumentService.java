@@ -122,6 +122,19 @@ public class DocumentService {
         return client.downloadContent(tenantId, documentId);
     }
 
+    /**
+     * Version history is a read-through projection: the expert owns both the
+     * retained revisions and their order.
+     */
+    public List<DocumentContentVersion> contentVersions(UUID tenantId, UUID documentId) {
+        return client.contentVersions(tenantId, documentId);
+    }
+
+    public DocumentContentDownload downloadContentVersion(UUID tenantId, UUID documentId,
+                                                          long version) {
+        return client.downloadContentVersion(tenantId, documentId, version);
+    }
+
     public DocumentContentMetadata contentMetadata(UUID tenantId, UUID documentId) {
         return client.contentMetadata(tenantId, documentId);
     }

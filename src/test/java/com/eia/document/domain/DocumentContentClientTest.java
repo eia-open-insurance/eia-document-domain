@@ -53,7 +53,8 @@ class DocumentContentClientTest {
               "contentType": "application/pdf",
               "sizeBytes": 23,
               "sha256": "9f2c5d0f8f0d1c9a5f0f0f3a6b8c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f607182",
-              "uploadedAt": "2026-10-20T09:30:00Z"
+              "uploadedAt": "2026-10-20T09:30:00Z",
+              "currentVersion": 3
             }
             """;
 
@@ -93,6 +94,7 @@ class DocumentContentClientTest {
         assertEquals(CONTENT.length, metadata.sizeBytes());
         assertEquals(SHA256, metadata.sha256());
         assertEquals(Instant.parse("2026-10-20T09:30:00Z"), metadata.uploadedAt());
+        assertEquals(3L, metadata.currentVersion());
         server.verify();
     }
 
