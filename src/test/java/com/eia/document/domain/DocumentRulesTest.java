@@ -107,6 +107,7 @@ class DocumentRulesTest {
 
     private static DocumentDto document(String status, LocalDate retentionUntil) {
         return new DocumentDto(UUID.randomUUID(), TENANT, "DOC-2026-0000001", "Title",
-                "POLICY", "CONFIDENTIAL", status, retentionUntil, 1, NOW, NOW);
+                "POLICY", "CONFIDENTIAL", status, retentionUntil, null, null, null, null,
+                1, NOW, NOW);
     }
 }

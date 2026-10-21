@@ -101,6 +101,31 @@ public class DocumentService {
     }
 
     /**
+     * Places a legal hold. The expert owns the stored snapshot and the state
+     * conflict (a document already held, or one whose status cannot be held), so
+     * its 400/404/409 problem is preserved for the caller.
+     */
+    public DocumentDto hold(UUID tenantId, UUID documentId, HoldDocumentCommand command) {
+        return client.hold(tenantId, documentId, trimToNull(command.reason()));
+    }
+
+    /**
+     * Releases the active legal hold and restores the status stored when the
+     * hold was placed.
+     */
+    public DocumentDto releaseHold(UUID tenantId, UUID documentId) {
+        return client.releaseHold(tenantId, documentId);
+    }
+
+    /**
+     * Disposes a document. The expert rejects a held, unretained, or otherwise
+     * non-disposable document with its 409 problem.
+     */
+    public DocumentDto dispose(UUID tenantId, UUID documentId) {
+        return client.dispose(tenantId, documentId);
+    }
+
+    /**
      * Proxies a raw content upload. The 10 MiB limit is a public API rule, so
      * it is enforced here before the expert is called; the file name is reduced
      * to a display name and the media type defaults to

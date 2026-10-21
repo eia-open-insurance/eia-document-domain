@@ -229,7 +229,7 @@ class DocumentLinkApiTest {
     private static DocumentDto document() {
         Instant timestamp = Instant.parse("2026-10-19T12:00:00Z");
         return new DocumentDto(DOCUMENT_ID, TENANT, "DOC-2026-0000001", "Policy schedule",
-                "POLICY", "CONFIDENTIAL", "ACTIVE", LocalDate.of(2036, 10, 19), 1,
-                timestamp, timestamp);
+                "POLICY", "CONFIDENTIAL", "ACTIVE", LocalDate.of(2036, 10, 19),
+                null, null, null, null, 1, timestamp, timestamp);
     }
 }

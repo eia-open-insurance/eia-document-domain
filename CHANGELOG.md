@@ -9,6 +9,12 @@ The format is based on Keep a Changelog and the project uses Semantic Versioning
 ### Added
 
 - Repository baseline.
+- Document legal holds and disposition: `POST /api/v1/documents/{documentId}/hold`
+  with `{"reason":"..."}`, `POST /api/v1/documents/{documentId}/hold/release`,
+  and `POST /api/v1/documents/{documentId}/dispose`. Each route forwards
+  `X-EIA-Tenant` and the `tenantId` query to the expert and preserves expert
+  400/404/409 failures as `application/problem+json`. The `DocumentDto`
+  projection adds `holdReason`, `heldAt`, `statusBeforeHold`, and `disposedAt`.
 - Document association links: `GET|POST /api/v1/documents/{documentId}/links` and
   `DELETE /api/v1/documents/{documentId}/links/{linkId}`, proxied to the expert
   with tenant forwarding and `application/problem+json` preservation for

@@ -59,6 +59,38 @@ public class DocumentController {
     }
 
     /**
+     * Places a legal hold on a document. The reason is recorded and disposition
+     * is blocked while the hold is active; the expert owns the state conflict
+     * and its 409 problem.
+     */
+    @PostMapping("/{documentId}/hold")
+    public DocumentDto hold(@RequestHeader(TENANT_HEADER) UUID tenantId,
+                            @PathVariable UUID documentId,
+                            @Valid @RequestBody HoldDocumentCommand command) {
+        return service.hold(tenantId, documentId, command);
+    }
+
+    /**
+     * Releases the active legal hold and restores the status captured when the
+     * hold was placed.
+     */
+    @PostMapping("/{documentId}/hold/release")
+    public DocumentDto releaseHold(@RequestHeader(TENANT_HEADER) UUID tenantId,
+                                   @PathVariable UUID documentId) {
+        return service.releaseHold(tenantId, documentId);
+    }
+
+    /**
+     * Tombstones a document as {@code DISPOSED}. A document under legal hold is
+     * not disposable; the expert answers that conflict with 409.
+     */
+    @PostMapping("/{documentId}/dispose")
+    public DocumentDto dispose(@RequestHeader(TENANT_HEADER) UUID tenantId,
+                               @PathVariable UUID documentId) {
+        return service.dispose(tenantId, documentId);
+    }
+
+    /**
      * Raw content upload. The tenant is forwarded as a header, the file name
      * travels on {@code X-File-Name}, and the media type on {@code Content-Type}.
      * Bodies above 10 MiB are rejected with a 413 problem before this method.

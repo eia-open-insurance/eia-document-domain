@@ -161,6 +161,46 @@ public class DocumentExpertClient {
     }
 
     /**
+     * Places a legal hold on the expert's document. The tenant travels on the
+     * query parameter and {@code X-EIA-Tenant}; the reason is the only body
+     * field. Every expert 400/404/409 keeps its problem body so the public API
+     * can return the expert's state conflict unchanged.
+     */
+    public DocumentDto hold(UUID tenantId, UUID documentId, String reason) {
+        return handle(client.post()
+                .uri(uri -> uri.path("/api/v1/documents/{documentId}/hold")
+                        .queryParam("tenantId", tenantId).build(documentId))
+                .header(TENANT_HEADER, tenantId.toString())
+                .body(new ExpertHoldRequest(reason)), true)
+                .body(DocumentDto.class);
+    }
+
+    /**
+     * Releases the active legal hold. The expert restores the status it
+     * snapshotted when the hold was placed and clears the hold columns.
+     */
+    public DocumentDto releaseHold(UUID tenantId, UUID documentId) {
+        return handle(client.post()
+                .uri(uri -> uri.path("/api/v1/documents/{documentId}/hold/release")
+                        .queryParam("tenantId", tenantId).build(documentId))
+                .header(TENANT_HEADER, tenantId.toString()), true)
+                .body(DocumentDto.class);
+    }
+
+    /**
+     * Tombstones the document as {@code DISPOSED}. A hold, an unexpired
+     * retention date, or an illegal status is an expert 409 problem and is
+     * forwarded unchanged.
+     */
+    public DocumentDto dispose(UUID tenantId, UUID documentId) {
+        return handle(client.post()
+                .uri(uri -> uri.path("/api/v1/documents/{documentId}/dispose")
+                        .queryParam("tenantId", tenantId).build(documentId))
+                .header(TENANT_HEADER, tenantId.toString()), true)
+                .body(DocumentDto.class);
+    }
+
+    /**
      * Uploads raw bytes to the expert's content store and returns the metadata
      * projection. The tenant travels on the query parameter and the
      * {@code X-EIA-Tenant} header; the file name travels on
@@ -326,6 +366,9 @@ public class DocumentExpertClient {
     ) {}
 
     public record ExpertStatusRequest(String status, Integer expectedVersion) {}
+
+    /** Internal hold payload: the tenant is on the query/header, not the body. */
+    public record ExpertHoldRequest(String reason) {}
 
     /**
      * Internal create payload. The tenant travels on the query parameter and

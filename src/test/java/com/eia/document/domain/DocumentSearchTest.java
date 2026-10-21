@@ -229,6 +229,6 @@ class DocumentSearchTest {
     private static DocumentDto document(UUID id, UUID tenantId, String number, String title,
                                         String type, String status, Instant updatedAt) {
         return new DocumentDto(id, tenantId, number, title, type, "INTERNAL", status, RETENTION,
-                0, BASE, updatedAt);
+                null, null, null, null, 0, BASE, updatedAt);
     }
 }
