@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.util.Comparator;
 import java.util.List;
@@ -103,6 +104,33 @@ public class ApiExceptionHandler {
 
     private static boolean isBlank(JsonNode node) {
         return node == null || node.isNull() || node.asText().isBlank();
+    }
+
+    /**
+     * The content proxy has its own public limit. Both the domain rule and the
+     * Spring multipart ceiling surface as the same {@code application/problem+json}
+     * 413 so a client sees one payload-too-large contract.
+     */
+    @ExceptionHandler(DocumentContentTooLargeException.class)
+    public ResponseEntity<JsonNode> contentTooLarge(DocumentContentTooLargeException ex) {
+        return payloadTooLarge(ex.getMessage());
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<JsonNode> uploadTooLarge(MaxUploadSizeExceededException ex) {
+        return payloadTooLarge(DocumentContentPolicy.tooLargeDetail());
+    }
+
+    private static ResponseEntity<JsonNode> payloadTooLarge(String detail) {
+        ObjectNode problem = JsonNodeFactory.instance.objectNode();
+        problem.put("type", "about:blank");
+        problem.put("title", HttpStatus.PAYLOAD_TOO_LARGE.getReasonPhrase());
+        problem.put("status", HttpStatus.PAYLOAD_TOO_LARGE.value());
+        problem.put("detail", detail);
+        problem.put("code", DocumentContentPolicy.FILE_TOO_LARGE);
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(problem);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

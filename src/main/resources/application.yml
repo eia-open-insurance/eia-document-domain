@@ -1,8 +1,19 @@
 server:
   port: 8096
+  tomcat:
+    # Keep the connection healthy when the content proxy rejects an oversized
+    # upload without reading the rest of the body.
+    max-swallow-size: 10MB
 spring:
   application:
     name: eia-document-domain
+  servlet:
+    multipart:
+      # The public content proxy accepts at most 10 MiB per document. The raw
+      # PUT route enforces the same limit in DocumentContentSizeLimitFilter;
+      # these settings keep any multipart path aligned with it.
+      max-file-size: 10MB
+      max-request-size: 10MB
 eia:
   document:
     expert-url: http://localhost:8095

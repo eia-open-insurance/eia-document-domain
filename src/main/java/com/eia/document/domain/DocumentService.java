@@ -100,6 +100,32 @@ public class DocumentService {
         return client.changeStatus(tenantId, id, target.name(), current.version());
     }
 
+    /**
+     * Proxies a raw content upload. The 10 MiB limit is a public API rule, so
+     * it is enforced here before the expert is called; the file name is reduced
+     * to a display name and the media type defaults to
+     * {@code application/octet-stream}.
+     */
+    public DocumentContentMetadata uploadContent(UUID tenantId, UUID documentId, String fileName,
+                                                 String contentType, byte[] content) {
+        byte[] bytes = content == null ? new byte[0] : content;
+        if (bytes.length > DocumentContentPolicy.MAX_CONTENT_BYTES) {
+            throw new DocumentContentTooLargeException(bytes.length);
+        }
+        return client.uploadContent(tenantId, documentId,
+                DocumentContentPolicy.requireFileName(fileName),
+                DocumentContentPolicy.contentTypeOrOctetStream(contentType),
+                bytes);
+    }
+
+    public DocumentContentDownload downloadContent(UUID tenantId, UUID documentId) {
+        return client.downloadContent(tenantId, documentId);
+    }
+
+    public DocumentContentMetadata contentMetadata(UUID tenantId, UUID documentId) {
+        return client.contentMetadata(tenantId, documentId);
+    }
+
     private static boolean matches(DocumentDto document, String query) {
         if (query.isEmpty()) {
             return true;

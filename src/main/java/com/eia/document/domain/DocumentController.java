@@ -1,7 +1,10 @@
 package com.eia.document.domain;
 
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -53,6 +56,53 @@ public class DocumentController {
                                     @PathVariable UUID id,
                                     @Valid @RequestBody ChangeStatusCommand command) {
         return service.changeStatus(tenantId, id, command);
+    }
+
+    /**
+     * Raw content upload. The tenant is forwarded as a header, the file name
+     * travels on {@code X-File-Name}, and the media type on {@code Content-Type}.
+     * Bodies above 10 MiB are rejected with a 413 problem before this method.
+     */
+    @PutMapping(path = "/{documentId}/content", consumes = MediaType.ALL_VALUE)
+    public DocumentContentMetadata uploadContent(
+            @RequestHeader(TENANT_HEADER) UUID tenantId,
+            @PathVariable UUID documentId,
+            @RequestHeader(value = HttpHeaders.CONTENT_TYPE, required = false) String contentType,
+            @RequestHeader(value = DocumentContentPolicy.FILE_NAME_HEADER, required = false)
+            String fileName,
+            @RequestBody(required = false) byte[] content) {
+        return service.uploadContent(tenantId, documentId, fileName, contentType, content);
+    }
+
+    /**
+     * Authorized byte download. The representation headers are passed through
+     * from the expert so the caller sees the stored media type, the original
+     * file name, and the integrity hash.
+     */
+    @GetMapping("/{documentId}/content")
+    public ResponseEntity<byte[]> downloadContent(@RequestHeader(TENANT_HEADER) UUID tenantId,
+                                                  @PathVariable UUID documentId) {
+        DocumentContentDownload content = service.downloadContent(tenantId, documentId);
+        ResponseEntity.BodyBuilder response = ResponseEntity.ok();
+        if (content.contentType() != null) {
+            response.contentType(content.contentType());
+        }
+        response.header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition(content));
+        if (content.sha256() != null && !content.sha256().isBlank()) {
+            response.header(DocumentContentPolicy.CONTENT_SHA_HEADER, content.sha256());
+        }
+        return response.body(content.bytes());
+    }
+
+    @GetMapping("/{documentId}/content/metadata")
+    public DocumentContentMetadata contentMetadata(@RequestHeader(TENANT_HEADER) UUID tenantId,
+                                                   @PathVariable UUID documentId) {
+        return service.contentMetadata(tenantId, documentId);
+    }
+
+    private static String contentDisposition(DocumentContentDownload content) {
+        String disposition = content.contentDisposition();
+        return disposition == null || disposition.isBlank() ? "attachment" : disposition;
     }
 
     @GetMapping("/{documentId}/links")

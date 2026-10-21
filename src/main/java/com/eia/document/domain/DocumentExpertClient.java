@@ -4,7 +4,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.InvalidMediaTypeException;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
@@ -154,6 +158,61 @@ public class DocumentExpertClient {
                         .queryParam("tenantId", tenantId).build(id))
                 .body(new ExpertStatusRequest(status, expectedVersion)))
                 .body(DocumentDto.class);
+    }
+
+    /**
+     * Uploads raw bytes to the expert's content store and returns the metadata
+     * projection. The tenant travels on the query parameter and the
+     * {@code X-EIA-Tenant} header; the file name travels on
+     * {@code X-File-Name} and the media type on {@code Content-Type}.
+     */
+    public DocumentContentMetadata uploadContent(UUID tenantId, UUID documentId, String fileName,
+                                                 String contentType, byte[] content) {
+        return handle(client.put()
+                .uri(uri -> uri.path("/api/v1/documents/{documentId}/content")
+                        .queryParam("tenantId", tenantId).build(documentId))
+                .header(TENANT_HEADER, tenantId.toString())
+                .header(DocumentContentPolicy.FILE_NAME_HEADER, fileName)
+                .contentType(mediaTypeOrOctetStream(contentType))
+                .body(content), true)
+                .body(DocumentContentMetadata.class);
+    }
+
+    /**
+     * Streams the stored bytes back. The expert's {@code Content-Type},
+     * {@code Content-Disposition}, and {@code X-Content-SHA256} headers are
+     * returned to the domain so the public route can expose them unchanged.
+     */
+    public DocumentContentDownload downloadContent(UUID tenantId, UUID documentId) {
+        ResponseEntity<byte[]> response = handle(client.get()
+                .uri(uri -> uri.path("/api/v1/documents/{documentId}/content")
+                        .queryParam("tenantId", tenantId).build(documentId))
+                .header(TENANT_HEADER, tenantId.toString()), true)
+                .toEntity(byte[].class);
+        byte[] body = response.getBody() == null ? new byte[0] : response.getBody();
+        HttpHeaders headers = response.getHeaders();
+        return new DocumentContentDownload(body, headers.getContentType(),
+                headers.getFirst(HttpHeaders.CONTENT_DISPOSITION),
+                headers.getFirst(DocumentContentPolicy.CONTENT_SHA_HEADER));
+    }
+
+    public DocumentContentMetadata contentMetadata(UUID tenantId, UUID documentId) {
+        return handle(client.get()
+                .uri(uri -> uri.path("/api/v1/documents/{documentId}/content/metadata")
+                        .queryParam("tenantId", tenantId).build(documentId))
+                .header(TENANT_HEADER, tenantId.toString()), true)
+                .body(DocumentContentMetadata.class);
+    }
+
+    private static MediaType mediaTypeOrOctetStream(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return MediaType.APPLICATION_OCTET_STREAM;
+        }
+        try {
+            return MediaType.parseMediaType(raw);
+        } catch (InvalidMediaTypeException ex) {
+            return MediaType.APPLICATION_OCTET_STREAM;
+        }
     }
 
     private RestClient.ResponseSpec handle(RestClient.RequestHeadersSpec<?> spec) {

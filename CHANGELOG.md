@@ -17,3 +17,13 @@ The format is based on Keep a Changelog and the project uses Semantic Versioning
 - Expert-backed search for `q`, including `linkedReference` matching, with the
   local tenant-list projection as the fallback when the expert search route is
   absent.
+- Document content proxy: `PUT /api/v1/documents/{documentId}/content` for raw
+  bytes with `Content-Type` and `X-File-Name` (forwarded unchanged so the
+  expert can URL-decode it), `GET /api/v1/documents/{documentId}/content` for
+  the byte stream with `Content-Type`, `Content-Disposition`, and
+  `X-Content-SHA256`, and
+  `GET /api/v1/documents/{documentId}/content/metadata`. Tenant forwarding and
+  expert 400/404/413 problem preservation match the link proxy. Upload bodies
+  are limited to 10 MiB, including an early filter rejection for oversized
+  `Content-Length` and chunked bodies, returned as a `FILE_TOO_LARGE` 413
+  problem.
