@@ -15,13 +15,16 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.startsWith;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -38,6 +41,7 @@ class DocumentContentApiTest {
     private static final String DISPOSITION = "attachment; filename=\"policy schedule.pdf\"";
     private static final String SHA256 = "9f2c5d0f8f0d1c9a5f0f0f3a6b8c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f607182";
     private static final Instant UPLOADED_AT = Instant.parse("2026-10-20T09:30:00Z");
+    private static final Instant DELETED_AT = Instant.parse("2026-10-22T10:15:00Z");
     private static final long CURRENT_VERSION = 3L;
     private static final byte[] CONTENT = "%PDF-1.7 document bytes".getBytes(StandardCharsets.UTF_8);
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -67,7 +71,9 @@ class DocumentContentApiTest {
                 .andExpect(jsonPath("$.sizeBytes").value(CONTENT.length))
                 .andExpect(jsonPath("$.sha256").value(SHA256))
                 .andExpect(jsonPath("$.uploadedAt").value("2026-10-20T09:30:00Z"))
-                .andExpect(jsonPath("$.currentVersion").value(CURRENT_VERSION));
+                .andExpect(jsonPath("$.currentVersion").value(CURRENT_VERSION))
+                .andExpect(jsonPath("$.deleted").value(false))
+                .andExpect(jsonPath("$.deletedAt").value(nullValue()));
 
         ArgumentCaptor<byte[]> body = ArgumentCaptor.forClass(byte[].class);
         verify(client).uploadContent(eq(TENANT), eq(DOCUMENT_ID), eq(FILE_NAME),
@@ -94,6 +100,16 @@ class DocumentContentApiTest {
     }
 
     @Test
+    void deletesTheContentAndReturnsNoContent() throws Exception {
+        mockMvc.perform(delete("/api/v1/documents/{documentId}/content", DOCUMENT_ID)
+                        .header("X-EIA-Tenant", TENANT.toString()))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+
+        verify(client).deleteContent(TENANT, DOCUMENT_ID);
+    }
+
+    @Test
     void returnsContentMetadata() throws Exception {
         when(client.contentMetadata(TENANT, DOCUMENT_ID)).thenReturn(metadata());
 
@@ -106,7 +122,30 @@ class DocumentContentApiTest {
                 .andExpect(jsonPath("$.sizeBytes").value(CONTENT.length))
                 .andExpect(jsonPath("$.sha256").value(SHA256))
                 .andExpect(jsonPath("$.uploadedAt").value("2026-10-20T09:30:00Z"))
-                .andExpect(jsonPath("$.currentVersion").value(CURRENT_VERSION));
+                .andExpect(jsonPath("$.currentVersion").value(CURRENT_VERSION))
+                .andExpect(jsonPath("$.deleted").value(false))
+                .andExpect(jsonPath("$.deletedAt").value(nullValue()));
+
+        verify(client).contentMetadata(TENANT, DOCUMENT_ID);
+    }
+
+    @Test
+    void returnsTombstonedMetadataWithoutTheBytes() throws Exception {
+        when(client.contentMetadata(TENANT, DOCUMENT_ID)).thenReturn(deletedMetadata());
+
+        mockMvc.perform(get("/api/v1/documents/{documentId}/content/metadata", DOCUMENT_ID)
+                        .header("X-EIA-Tenant", TENANT.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.documentId").value(DOCUMENT_ID.toString()))
+                .andExpect(jsonPath("$.fileName").value(FILE_NAME))
+                .andExpect(jsonPath("$.contentType").value(MediaType.APPLICATION_PDF_VALUE))
+                .andExpect(jsonPath("$.sizeBytes").value(CONTENT.length))
+                .andExpect(jsonPath("$.sha256").value(SHA256))
+                .andExpect(jsonPath("$.uploadedAt").value("2026-10-20T09:30:00Z"))
+                .andExpect(jsonPath("$.currentVersion").value(CURRENT_VERSION))
+                .andExpect(jsonPath("$.deleted").value(true))
+                .andExpect(jsonPath("$.deletedAt").value("2026-10-22T10:15:00Z"))
+                .andExpect(jsonPath("$.content").doesNotExist());
 
         verify(client).contentMetadata(TENANT, DOCUMENT_ID);
     }
@@ -126,6 +165,15 @@ class DocumentContentApiTest {
     @Test
     void requiresTheTenantHeaderOnContentRoutes() throws Exception {
         mockMvc.perform(get("/api/v1/documents/{documentId}/content", DOCUMENT_ID))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("TENANT_REQUIRED"));
+
+        verifyNoInteractions(client);
+    }
+
+    @Test
+    void requiresTheTenantHeaderOnDelete() throws Exception {
+        mockMvc.perform(delete("/api/v1/documents/{documentId}/content", DOCUMENT_ID))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("TENANT_REQUIRED"));
 
@@ -169,7 +217,7 @@ class DocumentContentApiTest {
                 startsWith(MediaType.APPLICATION_OCTET_STREAM_VALUE), any(byte[].class)))
                 .thenReturn(new DocumentContentMetadata(DOCUMENT_ID, "limit.pdf",
                         MediaType.APPLICATION_OCTET_STREAM_VALUE, atLimit.length, SHA256, UPLOADED_AT,
-                        CURRENT_VERSION));
+                        CURRENT_VERSION, null, false));
 
         mockMvc.perform(put("/api/v1/documents/{documentId}/content", DOCUMENT_ID)
                         .header("X-EIA-Tenant", TENANT.toString())
@@ -188,7 +236,8 @@ class DocumentContentApiTest {
         when(client.uploadContent(eq(TENANT), eq(DOCUMENT_ID), eq("empty.pdf"),
                 startsWith(MediaType.APPLICATION_PDF_VALUE), any(byte[].class)))
                 .thenReturn(new DocumentContentMetadata(DOCUMENT_ID, "empty.pdf",
-                        MediaType.APPLICATION_PDF_VALUE, 0, SHA256, UPLOADED_AT, CURRENT_VERSION));
+                        MediaType.APPLICATION_PDF_VALUE, 0, SHA256, UPLOADED_AT, CURRENT_VERSION,
+                        null, false));
 
         mockMvc.perform(put("/api/v1/documents/{documentId}/content", DOCUMENT_ID)
                         .header("X-EIA-Tenant", TENANT.toString())
@@ -209,7 +258,7 @@ class DocumentContentApiTest {
                 startsWith(MediaType.APPLICATION_OCTET_STREAM_VALUE), any(byte[].class)))
                 .thenReturn(new DocumentContentMetadata(DOCUMENT_ID, "raw.bin",
                         MediaType.APPLICATION_OCTET_STREAM_VALUE, CONTENT.length, SHA256, UPLOADED_AT,
-                        CURRENT_VERSION));
+                        CURRENT_VERSION, null, false));
 
         mockMvc.perform(put("/api/v1/documents/{documentId}/content", DOCUMENT_ID)
                         .header("X-EIA-Tenant", TENANT.toString())
@@ -255,6 +304,64 @@ class DocumentContentApiTest {
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.detail").value("Document was not found"))
                 .andExpect(jsonPath("$.code").value("EIA-DOC-4041"));
+    }
+
+    @Test
+    void preservesTheMissingContentProblemOnDelete() throws Exception {
+        doThrow(problem(404, "CONTENT_NOT_FOUND", "Content not found",
+                "Document 22222222-2222-7222-8222-222222222222 has no stored content"))
+                .when(client).deleteContent(TENANT, DOCUMENT_ID);
+
+        mockMvc.perform(delete("/api/v1/documents/{documentId}/content", DOCUMENT_ID)
+                        .header("X-EIA-Tenant", TENANT.toString()))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.title").value("Content not found"))
+                .andExpect(jsonPath("$.code").value("CONTENT_NOT_FOUND"));
+    }
+
+    @Test
+    void preservesTheLegalHoldConflictOnDelete() throws Exception {
+        doThrow(problem(409, "DOCUMENT_ON_LEGAL_HOLD", "Conflict",
+                "document is under legal hold; content deletion is blocked"))
+                .when(client).deleteContent(TENANT, DOCUMENT_ID);
+
+        mockMvc.perform(delete("/api/v1/documents/{documentId}/content", DOCUMENT_ID)
+                        .header("X-EIA-Tenant", TENANT.toString()))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.code").value("DOCUMENT_ON_LEGAL_HOLD"));
+    }
+
+    @Test
+    void preservesTheAlreadyDeletedConflictOnDelete() throws Exception {
+        doThrow(problem(409, "CONTENT_ALREADY_DELETED", "Conflict",
+                "Document content was already deleted"))
+                .when(client).deleteContent(TENANT, DOCUMENT_ID);
+
+        mockMvc.perform(delete("/api/v1/documents/{documentId}/content", DOCUMENT_ID)
+                        .header("X-EIA-Tenant", TENANT.toString()))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.code").value("CONTENT_ALREADY_DELETED"));
+    }
+
+    @Test
+    void preservesTheGoneProblemOnDownload() throws Exception {
+        when(client.downloadContent(TENANT, DOCUMENT_ID))
+                .thenThrow(problem(410, "CONTENT_DELETED", "Gone",
+                        "Document content was deleted"));
+
+        mockMvc.perform(get("/api/v1/documents/{documentId}/content", DOCUMENT_ID)
+                        .header("X-EIA-Tenant", TENANT.toString()))
+                .andExpect(status().isGone())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(410))
+                .andExpect(jsonPath("$.title").value("Gone"))
+                .andExpect(jsonPath("$.code").value("CONTENT_DELETED"));
     }
 
     @Test
@@ -318,7 +425,13 @@ class DocumentContentApiTest {
     private static DocumentContentMetadata metadata() {
         return new DocumentContentMetadata(DOCUMENT_ID, FILE_NAME,
                 MediaType.APPLICATION_PDF_VALUE, CONTENT.length, SHA256, UPLOADED_AT,
-                CURRENT_VERSION);
+                CURRENT_VERSION, null, false);
+    }
+
+    private static DocumentContentMetadata deletedMetadata() {
+        return new DocumentContentMetadata(DOCUMENT_ID, FILE_NAME,
+                MediaType.APPLICATION_PDF_VALUE, CONTENT.length, SHA256, UPLOADED_AT,
+                CURRENT_VERSION, DELETED_AT, true);
     }
 
     private static ExpertProblemException apiError(int status, String code, String message) {

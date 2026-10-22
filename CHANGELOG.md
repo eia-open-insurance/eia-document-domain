@@ -42,3 +42,11 @@ The format is based on Keep a Changelog and the project uses Semantic Versioning
   preserve expert 400/404 problems as `application/problem+json`. The content
   metadata projection (`upload` and `GET .../content/metadata`) now carries
   `currentVersion`.
+- Document content tombstones: `DELETE /api/v1/documents/{documentId}/content`
+  forwards `X-EIA-Tenant` and the `tenantId` query to the expert and answers
+  `204 No Content`; the expert keeps the file metadata while clearing the
+  bytes. The content metadata projection adds nullable `deletedAt` and the
+  derived `deleted` boolean. Expert problems are preserved unchanged: missing
+  content is 404 (`CONTENT_NOT_FOUND`), a legal hold or a repeated delete is
+  409 (`DOCUMENT_ON_LEGAL_HOLD` / `CONTENT_ALREADY_DELETED`), and a download of
+  tombstoned content is 410 (`CONTENT_DELETED`).

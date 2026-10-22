@@ -143,6 +143,16 @@ public class DocumentService {
                 bytes);
     }
 
+    /**
+     * Tombstones the stored content. The expert owns the state rules: missing
+     * content is 404, a legal hold or a repeated delete is 409, and a download
+     * of tombstoned bytes is 410. The domain only forwards the tenant scope, so
+     * those problems keep their status and body.
+     */
+    public void deleteContent(UUID tenantId, UUID documentId) {
+        client.deleteContent(tenantId, documentId);
+    }
+
     public DocumentContentDownload downloadContent(UUID tenantId, UUID documentId) {
         return client.downloadContent(tenantId, documentId);
     }

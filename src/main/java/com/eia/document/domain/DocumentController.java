@@ -107,6 +107,20 @@ public class DocumentController {
     }
 
     /**
+     * Tombstones the stored content. The bytes are cleared and the tombstone
+     * instant is recorded, while the filename, MIME type, size, digest, and
+     * revision stay readable on the metadata route. Missing content is 404, a
+     * document under legal hold or a repeated delete is 409, and a download of
+     * tombstoned bytes is 410; the expert owns all three problems.
+     */
+    @DeleteMapping("/{documentId}/content")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteContent(@RequestHeader(TENANT_HEADER) UUID tenantId,
+                              @PathVariable UUID documentId) {
+        service.deleteContent(tenantId, documentId);
+    }
+
+    /**
      * Authorized byte download. The representation headers are passed through
      * from the expert so the caller sees the stored media type, the original
      * file name, and the integrity hash.

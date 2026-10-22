@@ -219,9 +219,25 @@ public class DocumentExpertClient {
     }
 
     /**
+     * Tombstones the stored content on the expert. The delete keeps the file
+     * metadata, clears the bytes of the current pointer and every revision, and
+     * answers {@code 204}; every expert 4xx problem is preserved unchanged so
+     * the public API can return the missing-content 404, the legal-hold or
+     * repeated-delete 409, and the tombstoned-download 410 vocabulary.
+     */
+    public void deleteContent(UUID tenantId, UUID documentId) {
+        handle(client.delete()
+                .uri(uri -> uri.path("/api/v1/documents/{documentId}/content")
+                        .queryParam("tenantId", tenantId).build(documentId))
+                .header(TENANT_HEADER, tenantId.toString()), true)
+                .toBodilessEntity();
+    }
+
+    /**
      * Streams the stored bytes back. The expert's {@code Content-Type},
      * {@code Content-Disposition}, and {@code X-Content-SHA256} headers are
      * returned to the domain so the public route can expose them unchanged.
+     * Tombstoned content keeps the expert's 410 problem.
      */
     public DocumentContentDownload downloadContent(UUID tenantId, UUID documentId) {
         return toDownload(handle(client.get()

@@ -19,6 +19,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -46,6 +47,7 @@ class DocumentContentClientTest {
     private static final String DISPOSITION = "attachment; filename=\"policy schedule.pdf\"";
     private static final String SHA256 = "9f2c5d0f8f0d1c9a5f0f0f3a6b8c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f607182";
     private static final byte[] CONTENT = "%PDF-1.7 document bytes".getBytes(StandardCharsets.UTF_8);
+    private static final Instant DELETED_AT = Instant.parse("2026-10-22T10:15:00Z");
     private static final String METADATA_JSON = """
             {
               "documentId": "22222222-2222-7222-8222-222222222222",
@@ -54,7 +56,22 @@ class DocumentContentClientTest {
               "sizeBytes": 23,
               "sha256": "9f2c5d0f8f0d1c9a5f0f0f3a6b8c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f607182",
               "uploadedAt": "2026-10-20T09:30:00Z",
-              "currentVersion": 3
+              "currentVersion": 3,
+              "deletedAt": null,
+              "deleted": false
+            }
+            """;
+    private static final String DELETED_METADATA_JSON = """
+            {
+              "documentId": "22222222-2222-7222-8222-222222222222",
+              "fileName": "policy schedule.pdf",
+              "contentType": "application/pdf",
+              "sizeBytes": 23,
+              "sha256": "9f2c5d0f8f0d1c9a5f0f0f3a6b8c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f607182",
+              "uploadedAt": "2026-10-20T09:30:00Z",
+              "currentVersion": 3,
+              "deletedAt": "2026-10-22T10:15:00Z",
+              "deleted": true
             }
             """;
 
@@ -95,6 +112,8 @@ class DocumentContentClientTest {
         assertEquals(SHA256, metadata.sha256());
         assertEquals(Instant.parse("2026-10-20T09:30:00Z"), metadata.uploadedAt());
         assertEquals(3L, metadata.currentVersion());
+        assertNull(metadata.deletedAt());
+        assertFalse(metadata.deleted());
         server.verify();
     }
 
@@ -143,6 +162,114 @@ class DocumentContentClientTest {
         assertEquals(FILE_NAME, metadata.fileName());
         assertEquals(CONTENT.length, metadata.sizeBytes());
         assertEquals(SHA256, metadata.sha256());
+        assertNull(metadata.deletedAt());
+        assertFalse(metadata.deleted());
+        server.verify();
+    }
+
+    @Test
+    void metadataDecodesTheTombstoneProjection() {
+        server.expect(requestTo(METADATA_URL))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header(DocumentExpertClient.TENANT_HEADER, TENANT.toString()))
+                .andRespond(withSuccess(DELETED_METADATA_JSON, MediaType.APPLICATION_JSON));
+
+        DocumentContentMetadata metadata = client.contentMetadata(TENANT, DOCUMENT_ID);
+
+        assertEquals(DOCUMENT_ID, metadata.documentId());
+        assertEquals(FILE_NAME, metadata.fileName());
+        assertEquals(CONTENT.length, metadata.sizeBytes());
+        assertEquals(SHA256, metadata.sha256());
+        assertEquals(DELETED_AT, metadata.deletedAt());
+        assertTrue(metadata.deleted());
+        server.verify();
+    }
+
+    @Test
+    void deleteForwardsTenantAndUsesDeleteOnTheContentRoute() {
+        server.expect(requestTo(CONTENT_URL))
+                .andExpect(method(HttpMethod.DELETE))
+                .andExpect(header(DocumentExpertClient.TENANT_HEADER, TENANT.toString()))
+                .andRespond(withStatus(HttpStatus.NO_CONTENT));
+
+        client.deleteContent(TENANT, DOCUMENT_ID);
+
+        server.verify();
+    }
+
+    @Test
+    void deletePreservesTheMissingContent404() {
+        server.expect(requestTo(CONTENT_URL))
+                .andExpect(method(HttpMethod.DELETE))
+                .andRespond(withStatus(HttpStatus.NOT_FOUND)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("""
+                                {"code": "CONTENT_NOT_FOUND",
+                                 "message": "Document 22222222-2222-7222-8222-222222222222 has no stored content"}
+                                """));
+
+        ExpertProblemException exception = assertThrows(ExpertProblemException.class,
+                () -> client.deleteContent(TENANT, DOCUMENT_ID));
+
+        assertEquals(404, exception.status());
+        assertEquals("CONTENT_NOT_FOUND", exception.body().get("code").asText());
+        server.verify();
+    }
+
+    @Test
+    void deletePreservesTheLegalHold409() {
+        server.expect(requestTo(CONTENT_URL))
+                .andExpect(method(HttpMethod.DELETE))
+                .andRespond(withStatus(HttpStatus.CONFLICT)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("""
+                                {"code": "DOCUMENT_ON_LEGAL_HOLD",
+                                 "message": "document is under legal hold; content deletion is blocked"}
+                                """));
+
+        ExpertProblemException exception = assertThrows(ExpertProblemException.class,
+                () -> client.deleteContent(TENANT, DOCUMENT_ID));
+
+        assertEquals(409, exception.status());
+        assertEquals("DOCUMENT_ON_LEGAL_HOLD", exception.body().get("code").asText());
+        server.verify();
+    }
+
+    @Test
+    void deletePreservesTheAlreadyDeleted409() {
+        server.expect(requestTo(CONTENT_URL))
+                .andExpect(method(HttpMethod.DELETE))
+                .andRespond(withStatus(HttpStatus.CONFLICT)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("""
+                                {"code": "CONTENT_ALREADY_DELETED",
+                                 "message": "Document content was already deleted"}
+                                """));
+
+        ExpertProblemException exception = assertThrows(ExpertProblemException.class,
+                () -> client.deleteContent(TENANT, DOCUMENT_ID));
+
+        assertEquals(409, exception.status());
+        assertEquals("CONTENT_ALREADY_DELETED", exception.body().get("code").asText());
+        server.verify();
+    }
+
+    @Test
+    void downloadPreservesTheContentDeleted410() {
+        server.expect(requestTo(CONTENT_URL))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withStatus(HttpStatus.GONE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("""
+                                {"code": "CONTENT_DELETED",
+                                 "message": "Document content was deleted"}
+                                """));
+
+        ExpertProblemException exception = assertThrows(ExpertProblemException.class,
+                () -> client.downloadContent(TENANT, DOCUMENT_ID));
+
+        assertEquals(410, exception.status());
+        assertEquals("CONTENT_DELETED", exception.body().get("code").asText());
         server.verify();
     }
 
